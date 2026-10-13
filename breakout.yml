@@ -1,0 +1,43 @@
+name: Breakout alert
+
+on:
+  schedule:
+    # Every 5 minutes, 03:00-10:55 UTC (08:30-16:25 IST), Monday-Friday.
+    # The script itself only acts between 09:20 and 15:30 IST.
+    - cron: "*/5 3-10 * * 1-5"
+  workflow_dispatch: {}   # lets you press "Run workflow" manually to test
+
+concurrency:
+  group: breakout-alert
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Today's date (IST)
+        id: date
+        run: echo "d=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
+
+      # Remembers which stocks were already alerted today (no duplicate messages)
+      - uses: actions/cache@v4
+        with:
+          path: alert_state.json
+          key: alert-state-${{ steps.date.outputs.d }}-${{ github.run_id }}
+          restore-keys: alert-state-${{ steps.date.outputs.d }}-
+
+      - name: Run scan
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python breakout_alert.py
